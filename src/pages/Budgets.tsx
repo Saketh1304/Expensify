@@ -22,7 +22,7 @@ import { fetchBudgets, createBudget, updateBudget, deleteBudget } from '../store
 import { fetchCategories } from '../store/slices/categorySlice';
 import { RootState, AppDispatch } from '../store';
 import { format, addMonths, startOfMonth, endOfMonth } from 'date-fns';
-
+import { CircularProgress } from '@mui/material';
 const Budgets = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { budgets, loading } = useSelector((state: RootState) => state.budgets);
@@ -41,6 +41,21 @@ const Budgets = () => {
     dispatch(fetchCategories());
     dispatch(fetchBudgets({ active: true }));
   }, [dispatch]);
+
+  if (loading) {
+  return (
+    <Box
+      sx={{
+        height: '60vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <CircularProgress />
+    </Box>
+  );
+}
 
   const handleOpenDialog = (budget?: any) => {
     if (budget) {
@@ -78,14 +93,34 @@ const Budgets = () => {
   };
 
   const handleSubmit = async () => {
+  try {
+    const payload = {
+      amount: Number(formData.amount),
+      period: formData.period,
+      startDate: new Date(formData.startDate).toISOString(),
+      endDate: new Date(formData.endDate).toISOString(),
+      categoryId: formData.categoryId,
+    };
+
     if (editingBudget) {
-      await dispatch(updateBudget({ id: editingBudget.id, data: formData }));
+      await dispatch(
+        updateBudget({
+          id: editingBudget.id,
+          data: payload,
+        })
+      ).unwrap();
     } else {
-      await dispatch(createBudget(formData));
+      await dispatch(createBudget(payload)).unwrap();
     }
+
     handleCloseDialog();
     dispatch(fetchBudgets({ active: true }));
-  };
+  } catch (error) {
+    console.error('Failed to save budget:', error);
+  }
+};
+
+
 
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this budget?')) {
@@ -95,10 +130,11 @@ const Budgets = () => {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
+    return new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+}).format(amount);
+
   };
 
   const getStatusColor = (percentUsed: number) => {

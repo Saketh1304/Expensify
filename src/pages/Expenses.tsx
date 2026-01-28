@@ -26,7 +26,7 @@ import { fetchExpenses, createExpense, updateExpense, deleteExpense } from '../s
 import { fetchCategories } from '../store/slices/categorySlice';
 import { RootState, AppDispatch } from '../store';
 import { format } from 'date-fns';
-
+import { CircularProgress } from '@mui/material';
 const Expenses = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { expenses, loading, pagination } = useSelector((state: RootState) => state.expenses);
@@ -45,6 +45,21 @@ const Expenses = () => {
     dispatch(fetchCategories());
     dispatch(fetchExpenses({ page: page + 1 }));
   }, [dispatch, page]);
+
+  if (loading) {
+  return (
+    <Box
+      sx={{
+        height: '60vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <CircularProgress />
+    </Box>
+  );
+}
 
   const handleOpenDialog = (expense?: any) => {
     if (expense) {
@@ -101,10 +116,11 @@ const Expenses = () => {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
+    return new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+}).format(amount);
+
   };
 
   return (

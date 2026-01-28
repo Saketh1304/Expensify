@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { CircularProgress } from '@mui/material';
 import {
   Box,
   Button,
@@ -66,6 +67,22 @@ const Categories = () => {
     setOpenDialog(false);
     setEditingCategory(null);
   };
+
+  if (loading) {
+  return (
+    <Box
+      sx={{
+        height: '60vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <CircularProgress />
+    </Box>
+  );
+}
+
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({

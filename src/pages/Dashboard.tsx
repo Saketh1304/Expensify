@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
+import { CircularProgress } from '@mui/material';
+
 import {
   Grid,
   Paper,
@@ -41,14 +43,27 @@ const Dashboard = () => {
   };
 
   if (loading) {
-    return <LinearProgress />;
-  }
+  return (
+    <Box
+      sx={{
+        height: '60vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <CircularProgress />
+    </Box>
+  );
+}
+
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
+    return new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+}).format(amount);
+
   };
 
   return (
