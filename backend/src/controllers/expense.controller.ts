@@ -25,12 +25,14 @@ export const getExpenses = async (req: AuthRequest, res: Response): Promise<void
       where.date = {};
 
       if (startDate) {
-        where.date.gte = new Date(startDate as string);
+        const start = new Date(startDate as string);
+        start.setUTCHours(0, 0, 0, 0);
+        where.date.gte = start;
       }
 
       if (endDate) {
         const end = new Date(endDate as string);
-        end.setHours(23, 59, 59, 999); // 🔒 include full day
+        end.setUTCHours(23, 59, 59, 999);
         where.date.lte = end;
       }
     }
@@ -125,6 +127,9 @@ export const createExpense = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
+    // ✅ FIX: normalize date to safe UTC midday
+    parsedDate.setUTCHours(12, 0, 0, 0);
+
     const category = await prisma.category.findFirst({
       where: { id: categoryId, userId },
     });
@@ -204,6 +209,9 @@ export const updateExpense = async (req: AuthRequest, res: Response): Promise<vo
         res.status(400).json({ error: 'Invalid date' });
         return;
       }
+
+      // ✅ FIX: normalize updated date too
+      parsedDate.setUTCHours(12, 0, 0, 0);
       data.date = parsedDate;
     }
 
