@@ -1,22 +1,37 @@
 import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth.middleware';
-import { startOfMonth, endOfDay } from 'date-fns';
+
 const prisma = new PrismaClient();
 
-export const getDashboardStats = async (req: AuthRequest, res: Response): Promise<void> => {
+export const getDashboardStats = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
   try {
-    const userId = req.user?.userId;
+    const userId = req.user!.userId;
     const { startDate, endDate } = req.query;
 
+    // ✅ Normalize date range to UTC
     const start = startDate
-  ? new Date(startDate as string)
-  : startOfMonth(new Date());
+      ? new Date(startDate as string)
+      : new Date(Date.UTC(
+          new Date().getUTCFullYear(),
+          new Date().getUTCMonth(),
+          1,
+          0, 0, 0, 0
+        ));
 
-const end = endDate
-  ? new Date(endDate as string)
-  : endOfDay(new Date());
+    const end = endDate
+      ? new Date(endDate as string)
+      : new Date(Date.UTC(
+          new Date().getUTCFullYear(),
+          new Date().getUTCMonth() + 1,
+          0,
+          23, 59, 59, 999
+        ));
 
+    // -------------------- SUMMARY --------------------
     const totalExpenses = await prisma.expense.aggregate({
       where: {
         userId,
@@ -25,13 +40,15 @@ const end = endDate
           lte: end,
         },
       },
-      _sum: {
-        amount: true,
-      },
+      _sum: { amount: true },
       _count: true,
     });
 
-    const expensesByCategory = await prisma.expense.groupBy({
+    const currentTotal = totalExpenses._sum.amount || 0;
+    const expenseCount = totalExpenses._count;
+
+    // -------------------- EXPENSES BY CATEGORY --------------------
+    const grouped = await prisma.expense.groupBy({
       by: ['categoryId'],
       where: {
         userId,
@@ -40,14 +57,12 @@ const end = endDate
           lte: end,
         },
       },
-      _sum: {
-        amount: true,
-      },
+      _sum: { amount: true },
       _count: true,
     });
 
-    const categoriesData = await Promise.all(
-      expensesByCategory.map(async (item) => {
+    const expensesByCategory = await Promise.all(
+      grouped.map(async (item) => {
         const category = await prisma.category.findUnique({
           where: { id: item.categoryId },
           select: {
@@ -66,8 +81,11 @@ const end = endDate
       })
     );
 
+    // -------------------- RECENT EXPENSES --------------------
     const recentExpenses = await prisma.expense.findMany({
       where: { userId },
+      orderBy: { date: 'desc' },
+      take: 5,
       include: {
         category: {
           select: {
@@ -78,15 +96,16 @@ const end = endDate
           },
         },
       },
-      orderBy: { date: 'desc' },
-      take: 5,
     });
+
+    // -------------------- ACTIVE BUDGETS --------------------
+    const now = new Date();
 
     const activeBudgets = await prisma.budget.findMany({
       where: {
         userId,
-        startDate: { lte: new Date() },
-        endDate: { gte: new Date() },
+        startDate: { lte: now },
+        endDate: { gte: now },
       },
       include: {
         category: {
@@ -102,7 +121,7 @@ const end = endDate
 
     const budgetsWithProgress = await Promise.all(
       activeBudgets.map(async (budget) => {
-        const spent = await prisma.expense.aggregate({
+        const spentAgg = await prisma.expense.aggregate({
           where: {
             userId,
             categoryId: budget.categoryId,
@@ -111,52 +130,54 @@ const end = endDate
               lte: budget.endDate,
             },
           },
-          _sum: {
-            amount: true,
-          },
+          _sum: { amount: true },
         });
+
+        const spent = spentAgg._sum.amount || 0;
 
         return {
           ...budget,
-          spent: spent._sum.amount || 0,
-          remaining: budget.amount - (spent._sum.amount || 0),
-          percentUsed: ((spent._sum.amount || 0) / budget.amount) * 100,
+          spent,
+          remaining: budget.amount - spent,
+          percentUsed: budget.amount > 0 ? (spent / budget.amount) * 100 : 0,
         };
       })
     );
 
-    const previousPeriodStart = new Date(start);
-    previousPeriodStart.setMonth(previousPeriodStart.getMonth() - 1);
-    const previousPeriodEnd = new Date(end);
-    previousPeriodEnd.setMonth(previousPeriodEnd.getMonth() - 1);
+    // -------------------- PREVIOUS PERIOD COMPARISON --------------------
+    const prevStart = new Date(start);
+    prevStart.setUTCMonth(prevStart.getUTCMonth() - 1);
 
-    const previousPeriodTotal = await prisma.expense.aggregate({
+    const prevEnd = new Date(end);
+    prevEnd.setUTCMonth(prevEnd.getUTCMonth() - 1);
+
+    const prevTotalAgg = await prisma.expense.aggregate({
       where: {
         userId,
         date: {
-          gte: previousPeriodStart,
-          lte: previousPeriodEnd,
+          gte: prevStart,
+          lte: prevEnd,
         },
       },
-      _sum: {
-        amount: true,
-      },
+      _sum: { amount: true },
     });
 
-    const currentTotal = totalExpenses._sum.amount || 0;
-    const previousTotal = previousPeriodTotal._sum.amount || 0;
-    const percentageChange = previousTotal > 0
-      ? ((currentTotal - previousTotal) / previousTotal) * 100
-      : 0;
+    const previousTotal = prevTotalAgg._sum.amount || 0;
 
+    const percentageChange =
+      previousTotal > 0
+        ? ((currentTotal - previousTotal) / previousTotal) * 100
+        : 0;
+
+    // -------------------- RESPONSE --------------------
     res.json({
       summary: {
         totalExpenses: currentTotal,
-        expenseCount: totalExpenses._count,
-        averageExpense: totalExpenses._count > 0 ? currentTotal / totalExpenses._count : 0,
+        expenseCount,
+        averageExpense: expenseCount > 0 ? currentTotal / expenseCount : 0,
         percentageChange,
       },
-      expensesByCategory: categoriesData,
+      expensesByCategory,
       recentExpenses,
       activeBudgets: budgetsWithProgress,
     });
