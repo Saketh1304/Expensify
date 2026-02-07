@@ -27,7 +27,5 @@ router.post(
 );
 
 router.get('/me', authenticateToken, getCurrentUser);
-router.get('/health', (_req, res) => {
-  res.json({ status: 'OK', message: 'Server is running' });
-});
+
 export default router;
