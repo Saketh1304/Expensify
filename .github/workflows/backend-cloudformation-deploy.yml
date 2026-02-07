@@ -1,0 +1,65 @@
+name: Deploy Backend to AWS (CloudFormation)
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Build TypeScript
+        run: npm run build
+
+      # Bundle lambda (IMPORTANT 🔥)
+      - name: Bundle Lambda with esbuild
+        run: |
+          npx esbuild src/lambda.ts \
+          --bundle \
+          --platform=node \
+          --target=node18 \
+          --outfile=bundle.js
+
+      # Zip bundle for Lambda upload
+      - name: Create deployment zip
+        run: zip function.zip bundle.js package.json
+
+      # Upload zip to S3 bucket
+      - name: Upload zip to S3
+        run: aws s3 cp function.zip s3://expense-tracker-lambda-artifacts/function.zip
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ap-south-1
+
+      # Deploy CloudFormation template
+      - name: Deploy CloudFormation
+        run: |
+          aws cloudformation deploy \
+            --template-file template1.yml \
+            --stack-name expense-tracker-bundle-final \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --region ap-south-1
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ap-south-1
